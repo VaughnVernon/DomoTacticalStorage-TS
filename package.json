@@ -1,0 +1,96 @@
+{
+  "name": "domo-tactical-storage",
+  "version": "0.1.0",
+  "description": "Persistent storage backends for DomoTactical-TS - PostgreSQL, KurrentDB/EventStoreDB, and Cloudflare D1",
+  "author": "Vaughn Vernon",
+  "license": "RPL-1.5",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./postgres": {
+      "import": "./dist/postgres/index.js",
+      "types": "./dist/postgres/index.d.ts"
+    },
+    "./kurrentdb": {
+      "import": "./dist/kurrentdb/index.js",
+      "types": "./dist/kurrentdb/index.d.ts"
+    },
+    "./d1": {
+      "import": "./dist/d1/index.js",
+      "types": "./dist/d1/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "postbuild": "npm link",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:postgres": "vitest run tests/postgres",
+    "test:kurrentdb": "vitest run tests/kurrentdb",
+    "test:d1": "vitest run tests/d1",
+    "test:all": "./scripts/run-tests.sh",
+    "test:all:keep": "./scripts/run-tests.sh --keep",
+    "infra:up": "docker compose up -d",
+    "infra:down": "docker compose down -v",
+    "infra:logs": "docker compose logs -f",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run clean && npm run build && npm test",
+    "preversion": "npm test",
+    "postversion": "git push && git push --tags"
+  },
+  "keywords": [
+    "domo-tactical",
+    "event-sourcing",
+    "cqrs",
+    "postgresql",
+    "kurrentdb",
+    "eventstoredb",
+    "cloudflare-d1",
+    "journal",
+    "document-store",
+    "persistence"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/VaughnVernon/DomoTacticalStorage-TS.git"
+  },
+  "bugs": {
+    "url": "https://github.com/VaughnVernon/DomoTacticalStorage-TS/issues"
+  },
+  "homepage": "https://github.com/VaughnVernon/DomoTacticalStorage-TS#readme",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "peerDependencies": {
+    "domo-actors": "^1.2.0",
+    "domo-tactical": "^0.3.0"
+  },
+  "dependencies": {
+    "@kurrent/kurrentdb-client": "^1.1.0",
+    "pg": "^8.11.0",
+    "ulid": "^3.0.2",
+    "uuid": "^13.0.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240208.0",
+    "@types/node": "^24.9.1",
+    "@types/pg": "^8.10.0",
+    "@vitest/coverage-v8": "^4.0.13",
+    "domo-actors": "^1.2.0",
+    "domo-tactical": "^0.3.0",
+    "miniflare": "^3.20241018.0",
+    "typescript": "^5.7.2",
+    "vitest": "^4.0.13"
+  }
+}

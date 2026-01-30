@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: domo-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: domo_test
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  kurrentdb:
+    image: kurrentplatform/kurrentdb:latest
+    container_name: domo-kurrentdb
+    ports:
+      - "2113:2113"
+      - "1113:1113"
+    environment:
+      - KURRENTDB_INSECURE=true
+      - KURRENTDB_RUN_PROJECTIONS=All
+      - KURRENTDB_ENABLE_ATOM_PUB_OVER_HTTP=true
+      - KURRENTDB_CLUSTER_SIZE=1
+      - KURRENTDB_START_STANDARD_PROJECTIONS=true
+    volumes:
+      - kurrentdb_data:/var/lib/kurrentdb
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:2113/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:
+  kurrentdb_data:
