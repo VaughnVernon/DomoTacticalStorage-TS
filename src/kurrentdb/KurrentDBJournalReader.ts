@@ -7,7 +7,8 @@
 // See: https://opensource.org/license/rpl-1-5
 
 import { Actor } from 'domo-actors'
-import { JournalReader, Entry } from 'domo-tactical/store/journal'
+import { JournalReader } from 'domo-tactical/store/journal'
+import { Entry, TextEntry } from 'domo-tactical/store'
 import {
   KurrentDBClient,
   START,
@@ -56,7 +57,7 @@ export class KurrentDBJournalReader<T> extends Actor implements JournalReader<T>
       throw new Error('max must be greater than 0')
     }
 
-    const entries: Entry<T>[] = []
+    const entries: TextEntry[] = []
 
     // Read from $all stream
     const eventsIterator = this.client.readAll({
@@ -79,14 +80,22 @@ export class KurrentDBJournalReader<T> extends Actor implements JournalReader<T>
       if (event.streamId.startsWith('$snapshot-')) continue
 
       const eventMetadata = event.metadata as { typeVersion?: number; metadata?: string } | undefined
+      // Use commitPosition as globalPosition
+      const globalPosition = resolvedEvent.commitPosition !== undefined
+        ? Number(resolvedEvent.commitPosition)
+        : 0
+      // Convert 0-based revision to 1-based streamVersion
+      const streamVersion = Number(event.revision) + 1
 
-      entries.push({
-        id: event.id,
-        type: event.type,
-        typeVersion: eventMetadata?.typeVersion ?? 1,
-        entryData: JSON.stringify(event.data) as T,
-        metadata: eventMetadata?.metadata ?? '{}'
-      })
+      entries.push(new TextEntry(
+        event.id,
+        globalPosition,
+        event.type,
+        eventMetadata?.typeVersion ?? 1,
+        JSON.stringify(event.data),
+        streamVersion,
+        eventMetadata?.metadata ?? '{}'
+      ))
 
       count++
 
@@ -99,7 +108,8 @@ export class KurrentDBJournalReader<T> extends Actor implements JournalReader<T>
       if (count >= max) break
     }
 
-    return entries
+    // Cast to Entry<T>[] for return type compatibility
+    return entries as unknown as Entry<T>[]
   }
 
   async name(): Promise<string> {

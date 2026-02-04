@@ -7,7 +7,8 @@
 // See: https://opensource.org/license/rpl-1-5
 
 import { Actor } from 'domo-actors'
-import { JournalReader, Entry } from 'domo-tactical/store/journal'
+import { JournalReader } from 'domo-tactical/store/journal'
+import { Entry, TextEntry } from 'domo-tactical/store'
 import { Pool, PoolClient } from 'pg'
 
 /**
@@ -55,7 +56,7 @@ export class PostgresJournalReader<T> extends Actor implements JournalReader<T> 
     try {
       // Read entries from current position
       const result = await client.query(
-        `SELECT global_position, entry_id, entry_type, entry_type_version, entry_data, metadata
+        `SELECT global_position, entry_id, entry_type, entry_type_version, entry_data, stream_version, metadata
          FROM journal_entries
          WHERE global_position > $1
          ORDER BY global_position ASC
@@ -67,13 +68,17 @@ export class PostgresJournalReader<T> extends Actor implements JournalReader<T> 
         return []
       }
 
-      const entries: Entry<T>[] = result.rows.map((row) => ({
-        id: row.entry_id,
-        type: row.entry_type,
-        typeVersion: row.entry_type_version,
-        entryData: (typeof row.entry_data === 'string' ? row.entry_data : JSON.stringify(row.entry_data)) as T,
-        metadata: typeof row.metadata === 'string' ? row.metadata : JSON.stringify(row.metadata || {})
-      }))
+      const entries: Entry<T>[] = result.rows.map((row) =>
+        new TextEntry(
+          row.entry_id,
+          Number(row.global_position),
+          row.entry_type,
+          row.entry_type_version,
+          typeof row.entry_data === 'string' ? row.entry_data : JSON.stringify(row.entry_data),
+          Number(row.stream_version),
+          typeof row.metadata === 'string' ? row.metadata : JSON.stringify(row.metadata || {})
+        )
+      ) as unknown as Entry<T>[]
 
       // Update position to the last read entry's global_position
       const lastPosition = Number(result.rows[result.rows.length - 1].global_position)

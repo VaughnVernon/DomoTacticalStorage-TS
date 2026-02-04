@@ -7,8 +7,8 @@
 // See: https://opensource.org/license/rpl-1-5
 
 import { Actor } from 'domo-actors'
-import { StreamReader, EntryStream, Entry } from 'domo-tactical/store/journal'
-import { State, ObjectState } from 'domo-tactical/store'
+import { StreamReader, EntryStream } from 'domo-tactical/store/journal'
+import { State, ObjectState, Entry, TextEntry } from 'domo-tactical/store'
 
 /**
  * Cloudflare D1 implementation of StreamReader.
@@ -60,25 +60,31 @@ export class D1StreamReader<T> extends Actor implements StreamReader<T> {
 
     // Get entries respecting truncate-before
     const entriesResult = await this.db.prepare(
-      `SELECT entry_id, entry_type, entry_type_version, entry_data, metadata
+      `SELECT global_position, entry_id, entry_type, entry_type_version, entry_data, stream_version, metadata
        FROM journal_entries
        WHERE stream_name = ? AND stream_version >= ?
        ORDER BY stream_version ASC`
     ).bind(streamName, truncateBefore).all<{
+      global_position: number
       entry_id: string
       entry_type: string
       entry_type_version: number
       entry_data: string
+      stream_version: number
       metadata: string | null
     }>()
 
-    const entries: Entry<T>[] = (entriesResult.results || []).map((row) => ({
-      id: row.entry_id,
-      type: row.entry_type,
-      typeVersion: row.entry_type_version,
-      entryData: row.entry_data as T,
-      metadata: row.metadata || '{}'
-    }))
+    const entries: TextEntry[] = (entriesResult.results || []).map((row) =>
+      new TextEntry(
+        row.entry_id,
+        row.global_position,
+        row.entry_type,
+        row.entry_type_version,
+        row.entry_data,
+        row.stream_version,
+        row.metadata || '{}'
+      )
+    )
 
     // Get snapshot if exists
     const snapshotResult = await this.db.prepare(
@@ -103,6 +109,7 @@ export class D1StreamReader<T> extends Actor implements StreamReader<T> {
       )
     }
 
-    return new EntryStream(streamName, currentVersion, entries, snapshot, false, false)
+    // Cast entries to Entry<T>[] - TextEntry extends Entry<string> and T is typically string
+    return new EntryStream<T>(streamName, currentVersion, entries as unknown as Entry<T>[], snapshot, false, false)
   }
 }

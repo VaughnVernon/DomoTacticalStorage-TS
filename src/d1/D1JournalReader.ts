@@ -7,7 +7,8 @@
 // See: https://opensource.org/license/rpl-1-5
 
 import { Actor } from 'domo-actors'
-import { JournalReader, Entry } from 'domo-tactical/store/journal'
+import { JournalReader } from 'domo-tactical/store/journal'
+import { Entry, TextEntry } from 'domo-tactical/store'
 
 /**
  * Cloudflare D1 implementation of JournalReader.
@@ -52,7 +53,7 @@ export class D1JournalReader<T> extends Actor implements JournalReader<T> {
 
     // Read entries from current position
     const result = await this.db.prepare(
-      `SELECT global_position, entry_id, entry_type, entry_type_version, entry_data, metadata
+      `SELECT global_position, entry_id, entry_type, entry_type_version, entry_data, stream_version, metadata
        FROM journal_entries
        WHERE global_position > ?
        ORDER BY global_position ASC
@@ -63,6 +64,7 @@ export class D1JournalReader<T> extends Actor implements JournalReader<T> {
       entry_type: string
       entry_type_version: number
       entry_data: string
+      stream_version: number
       metadata: string | null
     }>()
 
@@ -72,13 +74,17 @@ export class D1JournalReader<T> extends Actor implements JournalReader<T> {
       return []
     }
 
-    const entries: Entry<T>[] = rows.map((row) => ({
-      id: row.entry_id,
-      type: row.entry_type,
-      typeVersion: row.entry_type_version,
-      entryData: row.entry_data as T,
-      metadata: row.metadata || '{}'
-    }))
+    const entries: TextEntry[] = rows.map((row) =>
+      new TextEntry(
+        row.entry_id,
+        row.global_position,
+        row.entry_type,
+        row.entry_type_version,
+        row.entry_data,
+        row.stream_version,
+        row.metadata || '{}'
+      )
+    )
 
     // Update position to the last read entry's global_position
     const lastPosition = rows[rows.length - 1].global_position
@@ -87,7 +93,8 @@ export class D1JournalReader<T> extends Actor implements JournalReader<T> {
     // Persist position
     await this.persistPosition()
 
-    return entries
+    // Cast to Entry<T>[] for return type compatibility
+    return entries as unknown as Entry<T>[]
   }
 
   async name(): Promise<string> {

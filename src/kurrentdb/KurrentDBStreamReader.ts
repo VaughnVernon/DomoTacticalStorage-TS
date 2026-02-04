@@ -7,8 +7,8 @@
 // See: https://opensource.org/license/rpl-1-5
 
 import { Actor } from 'domo-actors'
-import { StreamReader, EntryStream, Entry } from 'domo-tactical/store/journal'
-import { State, ObjectState } from 'domo-tactical/store'
+import { StreamReader, EntryStream } from 'domo-tactical/store/journal'
+import { State, ObjectState, Entry, TextEntry } from 'domo-tactical/store'
 import {
   KurrentDBClient,
   START,
@@ -58,25 +58,31 @@ export class KurrentDBStreamReader<T> extends Actor implements StreamReader<T> {
         fromRevision: START
       })
 
-      const entries: Entry<T>[] = []
+      const entries: TextEntry[] = []
       let maxVersion = 0
 
       for await (const resolvedEvent of eventsIterator) {
         const event = resolvedEvent.event
         if (!event) continue
 
-        const revision = Number(event.revision) + 1 // Convert to 1-based version
-        maxVersion = Math.max(maxVersion, revision)
+        const streamVersion = Number(event.revision) + 1 // Convert to 1-based version
+        maxVersion = Math.max(maxVersion, streamVersion)
 
         const eventMetadata = event.metadata as { typeVersion?: number; metadata?: string } | undefined
+        // Use commitPosition as globalPosition (convert bigint to number)
+        const globalPosition = resolvedEvent.commitPosition !== undefined
+          ? Number(resolvedEvent.commitPosition)
+          : 0
 
-        entries.push({
-          id: event.id,
-          type: event.type,
-          typeVersion: eventMetadata?.typeVersion ?? 1,
-          entryData: JSON.stringify(event.data) as T,
-          metadata: eventMetadata?.metadata ?? '{}'
-        })
+        entries.push(new TextEntry(
+          event.id,
+          globalPosition,
+          event.type,
+          eventMetadata?.typeVersion ?? 1,
+          JSON.stringify(event.data),
+          streamVersion,
+          eventMetadata?.metadata ?? '{}'
+        ))
       }
 
       if (entries.length === 0) {
@@ -86,7 +92,8 @@ export class KurrentDBStreamReader<T> extends Actor implements StreamReader<T> {
       // Try to load snapshot
       const snapshot = await this.loadSnapshot(streamName)
 
-      return new EntryStream(streamName, maxVersion, entries, snapshot, false, false)
+      // Cast entries to Entry<T>[] - TextEntry extends Entry<string> and T is typically string
+      return new EntryStream<T>(streamName, maxVersion, entries as unknown as Entry<T>[], snapshot, false, false)
     } catch (error) {
       if (error instanceof StreamNotFoundError) {
         return EntryStream.empty<T>(streamName)

@@ -7,8 +7,8 @@
 // See: https://opensource.org/license/rpl-1-5
 
 import { Actor } from 'domo-actors'
-import { StreamReader, EntryStream, Entry } from 'domo-tactical/store/journal'
-import { State, ObjectState } from 'domo-tactical/store'
+import { StreamReader, EntryStream } from 'domo-tactical/store/journal'
+import { State, ObjectState, Entry, TextEntry } from 'domo-tactical/store'
 import { Pool } from 'pg'
 
 /**
@@ -59,20 +59,24 @@ export class PostgresStreamReader<T> extends Actor implements StreamReader<T> {
 
       // Get entries respecting truncate-before
       const entriesResult = await client.query(
-        `SELECT entry_id, entry_type, entry_type_version, entry_data, metadata
+        `SELECT global_position, entry_id, entry_type, entry_type_version, entry_data, stream_version, metadata
          FROM journal_entries
          WHERE stream_name = $1 AND stream_version >= $2
          ORDER BY stream_version ASC`,
         [streamName, truncateBefore]
       )
 
-      const entries: Entry<T>[] = entriesResult.rows.map((row) => ({
-        id: row.entry_id,
-        type: row.entry_type,
-        typeVersion: row.entry_type_version,
-        entryData: (typeof row.entry_data === 'string' ? row.entry_data : JSON.stringify(row.entry_data)) as T,
-        metadata: typeof row.metadata === 'string' ? row.metadata : JSON.stringify(row.metadata || {})
-      }))
+      const entries: TextEntry[] = entriesResult.rows.map((row) =>
+        new TextEntry(
+          row.entry_id,
+          Number(row.global_position),
+          row.entry_type,
+          row.entry_type_version,
+          typeof row.entry_data === 'string' ? row.entry_data : JSON.stringify(row.entry_data),
+          Number(row.stream_version),
+          typeof row.metadata === 'string' ? row.metadata : JSON.stringify(row.metadata || {})
+        )
+      )
 
       // Get snapshot if exists
       const snapshotResult = await client.query(
@@ -96,7 +100,8 @@ export class PostgresStreamReader<T> extends Actor implements StreamReader<T> {
         )
       }
 
-      return new EntryStream(streamName, currentVersion, entries, snapshot, false, false)
+      // Cast entries to Entry<T>[] - TextEntry extends Entry<string> and T is typically string
+      return new EntryStream<T>(streamName, currentVersion, entries as unknown as Entry<T>[], snapshot, false, false)
     } finally {
       client.release()
     }
