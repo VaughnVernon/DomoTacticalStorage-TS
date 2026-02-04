@@ -281,4 +281,96 @@ describe('D1DocumentStore', () => {
     expect(result.state?.nested.a).toBe('nested')
     expect(result.state?.nullable).toBeNull()
   })
+
+  it('should return error when reading with empty id', async () => {
+    const result = await store.read('', 'User')
+    expect(result.outcome.success).toBe(false)
+    expect(result.outcome.error?.result).toBe(Result.Error)
+    expect(result.stateVersion).toBe(-1)
+  })
+
+  it('should return error when reading with empty type', async () => {
+    const result = await store.read('user-123', '')
+    expect(result.outcome.success).toBe(false)
+    expect(result.outcome.error?.result).toBe(Result.Error)
+    expect(result.stateVersion).toBe(-1)
+  })
+
+  it('should return error when writing null state', async () => {
+    const result = await store.write('user-null', 'User', null as unknown as UserState, 1)
+    expect(result.outcome.success).toBe(false)
+    expect(result.outcome.error?.result).toBe(Result.Error)
+  })
+
+  it('should return all not found when reading all missing documents', async () => {
+    const result = await store.readAll([
+      { id: 'missing-1', type: 'User' },
+      { id: 'missing-2', type: 'User' }
+    ])
+
+    expect(result.outcome.success).toBe(false)
+    expect(result.outcome.error?.result).toBe(Result.NotAllFound)
+    expect(result.bundles.length).toBe(0)
+  })
+
+  it('should return success value in outcome', async () => {
+    const user: UserState = { name: 'OutcomeTest', email: 'outcome@test.com', age: 33 }
+
+    await store.write('outcome-test', 'User', user, 1)
+
+    const result = await store.read<UserState>('outcome-test', 'User')
+    expect(result.outcome.success).toBe(true)
+    expect(result.outcome.value).toEqual(user)
+  })
+
+  it('should return write result with sources', async () => {
+    class TestEvent extends DomainEvent {
+      constructor(public readonly data: string) {
+        super()
+      }
+
+      override id(): string {
+        return this.data
+      }
+    }
+
+    const user: UserState = { name: 'SourcesTest', email: 'sources@test.com', age: 25 }
+    const sources = [new TestEvent('test-data')]
+
+    const result = await store.write('sources-test', 'User', user, 1, sources)
+    expect(result.outcome.success).toBe(true)
+    expect(result.sources).toEqual(sources)
+    expect(result.state).toEqual(user)
+    expect(result.id).toBe('sources-test')
+  })
+
+  it('should handle readAll returning found bundles', async () => {
+    // Write documents
+    await store.write('bundle-1', 'User', { name: 'Bundle1', email: 'b1@test.com', age: 1 }, 1)
+    await store.write('bundle-2', 'User', { name: 'Bundle2', email: 'b2@test.com', age: 2 }, 1)
+    await store.write('bundle-3', 'User', { name: 'Bundle3', email: 'b3@test.com', age: 3 }, 1)
+
+    const result = await store.readAll([
+      { id: 'bundle-1', type: 'User' },
+      { id: 'bundle-2', type: 'User' },
+      { id: 'bundle-3', type: 'User' }
+    ])
+
+    expect(result.outcome.success).toBe(true)
+    expect(result.bundles.length).toBe(3)
+    expect(result.bundles[0].state).toEqual({ name: 'Bundle1', email: 'b1@test.com', age: 1 })
+    expect(result.bundles[1].state).toEqual({ name: 'Bundle2', email: 'b2@test.com', age: 2 })
+    expect(result.bundles[2].state).toEqual({ name: 'Bundle3', email: 'b3@test.com', age: 3 })
+  })
+
+  it('should verify D1Config create and getDatabase', async () => {
+    // The config is already created in beforeAll
+    expect(config).toBeDefined()
+    const db = config.getDatabase()
+    expect(db).toBeDefined()
+
+    // Verify we can use the database
+    const result = await db.prepare('SELECT 1 as test').first<{ test: number }>()
+    expect(result?.test).toBe(1)
+  })
 })

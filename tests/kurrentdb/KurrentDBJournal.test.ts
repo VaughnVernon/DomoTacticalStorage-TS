@@ -552,4 +552,350 @@ describe('KurrentDBJournal', () => {
     const snapshotData = stream.snapshot?.data ?? stream.snapshot
     expect(snapshotData).toEqual(snapshot)
   })
+
+  it('should verify Entry properties including globalPosition', async () => {
+    if (!config) return
+
+    journal = testStage.actorFor<KurrentDBJournal<string>>(
+      {
+        type: () => 'Journal',
+        instantiator: () => ({
+          instantiate: () => new KurrentDBJournal(config)
+        })
+      }
+    )
+
+    const streamName = `entry-props-${Date.now()}`
+
+    // Append events
+    await journal.append(streamName, StreamState.NoStream, new AccountOpened('ep1', 'EntryProps1', 100), Metadata.nullMetadata())
+    await journal.append(streamName, 2, new FundsDeposited('ep1', 50), Metadata.nullMetadata())
+
+    // Read via stream reader
+    const reader = await journal.streamReader('entry-props-reader')
+    const stream = await reader.streamFor(streamName)
+
+    expect(stream.entries.length).toBe(2)
+    const entry = stream.entries[0]
+
+    // Verify all Entry properties
+    expect(entry.id).toBeDefined()
+    expect(entry.globalPosition).toBeGreaterThanOrEqual(0) // KurrentDB uses commitPosition
+    expect(entry.type).toBe('AccountOpened')
+    expect(entry.typeVersion).toBe(1)
+    expect(entry.streamVersion).toBe(1)
+    expect(entry.entryData).toBeDefined()
+    expect(entry.metadata).toBeDefined()
+
+    // Verify entryData contains the event data
+    const data = JSON.parse(entry.entryData)
+    expect(data.accountId).toBe('ep1')
+    expect(data.name).toBe('EntryProps1')
+    expect(data.balance).toBe(100)
+  })
+
+  it('should have increasing globalPosition across streams', async () => {
+    if (!config) return
+
+    journal = testStage.actorFor<KurrentDBJournal<string>>(
+      {
+        type: () => 'Journal',
+        instantiator: () => ({
+          instantiate: () => new KurrentDBJournal(config)
+        })
+      }
+    )
+
+    const streamA = `gp-stream-a-${Date.now()}`
+    const streamB = `gp-stream-b-${Date.now()}`
+
+    // Append to multiple streams
+    await journal.append(streamA, StreamState.NoStream, new AccountOpened('gpa', 'A', 100), Metadata.nullMetadata())
+    await journal.append(streamB, StreamState.NoStream, new AccountOpened('gpb', 'B', 200), Metadata.nullMetadata())
+    await journal.append(streamA, 2, new FundsDeposited('gpa', 50), Metadata.nullMetadata())
+
+    // Read via journal reader
+    const reader = await journal.journalReader(`gp-reader-${Date.now()}`)
+    const entries = await reader.readNext(100)
+
+    // Filter to only our test entries (KurrentDB $all contains all events)
+    const testEntries = entries.filter(e =>
+      e.type === 'AccountOpened' || e.type === 'FundsDeposited'
+    )
+
+    expect(testEntries.length).toBeGreaterThanOrEqual(3)
+
+    // Verify globalPosition is monotonically increasing
+    for (let i = 1; i < testEntries.length; i++) {
+      expect(testEntries[i].globalPosition).toBeGreaterThanOrEqual(testEntries[i - 1].globalPosition)
+    }
+  })
+
+  it('should verify streamVersion on entries within a stream', async () => {
+    if (!config) return
+
+    journal = testStage.actorFor<KurrentDBJournal<string>>(
+      {
+        type: () => 'Journal',
+        instantiator: () => ({
+          instantiate: () => new KurrentDBJournal(config)
+        })
+      }
+    )
+
+    const streamName = `sv-test-${Date.now()}`
+
+    // Append multiple events to same stream
+    await journal.appendAll(streamName, StreamState.NoStream, [
+      new AccountOpened('sv', 'StreamVersion', 100),
+      new FundsDeposited('sv', 50),
+      new FundsDeposited('sv', 25)
+    ] as Source<unknown>[], Metadata.nullMetadata())
+
+    // Read stream
+    const reader = await journal.streamReader('sv-reader')
+    const stream = await reader.streamFor(streamName)
+
+    expect(stream.entries.length).toBe(3)
+    expect(stream.entries[0].streamVersion).toBe(1)
+    expect(stream.entries[1].streamVersion).toBe(2)
+    expect(stream.entries[2].streamVersion).toBe(3)
+  })
+
+  it('should preserve metadata in entries', async () => {
+    if (!config) return
+
+    journal = testStage.actorFor<KurrentDBJournal<string>>(
+      {
+        type: () => 'Journal',
+        instantiator: () => ({
+          instantiate: () => new KurrentDBJournal(config)
+        })
+      }
+    )
+
+    const streamName = `meta-test-${Date.now()}`
+    const metadata = Metadata.with(
+      new Map([['correlationId', 'corr-123'], ['causationId', 'cause-456']]),
+      'test-value',
+      'create'
+    )
+
+    await journal.append(streamName, StreamState.NoStream, new AccountOpened('mt', 'MetaTest', 100), metadata)
+
+    // Read stream
+    const reader = await journal.streamReader('meta-reader')
+    const stream = await reader.streamFor(streamName)
+
+    expect(stream.entries.length).toBe(1)
+    const entry = stream.entries[0]
+
+    // Verify metadata is preserved
+    const entryMetadata = JSON.parse(entry.metadata)
+    expect(entryMetadata.operation).toBe('create')
+    expect(entryMetadata.value).toBe('test-value')
+  })
+
+  it('should appendAllWith snapshot', async () => {
+    if (!config) return
+
+    journal = testStage.actorFor<KurrentDBJournal<string>>(
+      {
+        type: () => 'Journal',
+        instantiator: () => ({
+          instantiate: () => new KurrentDBJournal(config)
+        })
+      }
+    )
+
+    const streamName = `append-all-with-${Date.now()}`
+    const events = [
+      new AccountOpened('aaw', 'AppendAllWith', 1000),
+      new FundsDeposited('aaw', 500),
+      new FundsDeposited('aaw', 250)
+    ] as Source<unknown>[]
+
+    const snapshot = { balance: 1750, name: 'AppendAllWith' }
+
+    const result = await journal.appendAllWith(
+      streamName,
+      StreamState.NoStream,
+      events,
+      Metadata.nullMetadata(),
+      snapshot
+    )
+
+    expect(result.isSuccess()).toBe(true)
+    expect(result.streamVersion).toBe(3)
+    expect(result.snapshot).toEqual(snapshot)
+
+    // Verify snapshot is persisted
+    const reader = await journal.streamReader('aaw-reader')
+    const stream = await reader.streamFor(streamName)
+
+    expect(stream.entries.length).toBe(3)
+    expect(stream.snapshot).toBeDefined()
+    const snapshotData = stream.snapshot?.data ?? stream.snapshot
+    expect(snapshotData).toEqual(snapshot)
+  })
+
+  it('should return reader name', async () => {
+    if (!config) return
+
+    journal = testStage.actorFor<KurrentDBJournal<string>>(
+      {
+        type: () => 'Journal',
+        instantiator: () => ({
+          instantiate: () => new KurrentDBJournal(config)
+        })
+      }
+    )
+
+    const reader = await journal.journalReader('named-reader')
+    const name = await reader.name()
+    expect(name).toBe('named-reader')
+  })
+
+  it('should handle EntryStream tombstoned state', async () => {
+    if (!config) return
+
+    journal = testStage.actorFor<KurrentDBJournal<string>>(
+      {
+        type: () => 'Journal',
+        instantiator: () => ({
+          instantiate: () => new KurrentDBJournal(config)
+        })
+      }
+    )
+
+    const streamName = `tombstone-stream-${Date.now()}`
+
+    // Create and tombstone stream
+    await journal.append(streamName, StreamState.NoStream, new AccountOpened('ts', 'TS', 100), Metadata.nullMetadata())
+    await journal.tombstone(streamName)
+
+    // Read stream
+    const reader = await journal.streamReader('tombstone-stream-reader')
+    const stream = await reader.streamFor(streamName)
+
+    expect(stream.isTombstoned).toBe(true)
+  })
+
+  it('should handle EntryStream empty state', async () => {
+    if (!config) return
+
+    journal = testStage.actorFor<KurrentDBJournal<string>>(
+      {
+        type: () => 'Journal',
+        instantiator: () => ({
+          instantiate: () => new KurrentDBJournal(config)
+        })
+      }
+    )
+
+    // Read non-existent stream
+    const reader = await journal.streamReader('empty-stream-reader')
+    const stream = await reader.streamFor(`nonexistent-stream-${Date.now()}`)
+
+    // Empty stream has no entries and version 0
+    expect(stream.entries.length).toBe(0)
+    expect(stream.streamVersion).toBe(0)
+  })
+
+  it('should handle JournalReader max validation', async () => {
+    if (!config) return
+
+    journal = testStage.actorFor<KurrentDBJournal<string>>(
+      {
+        type: () => 'Journal',
+        instantiator: () => ({
+          instantiate: () => new KurrentDBJournal(config)
+        })
+      }
+    )
+
+    const reader = await journal.journalReader('max-validation-reader')
+
+    // Should throw for invalid max values
+    await expect(reader.readNext(0)).rejects.toThrow('max must be greater than 0')
+    await expect(reader.readNext(-1)).rejects.toThrow('max must be greater than 0')
+  })
+
+  it('should handle seek with negative position', async () => {
+    if (!config) return
+
+    journal = testStage.actorFor<KurrentDBJournal<string>>(
+      {
+        type: () => 'Journal',
+        instantiator: () => ({
+          instantiate: () => new KurrentDBJournal(config)
+        })
+      }
+    )
+
+    const reader = await journal.journalReader('seek-negative-reader')
+
+    // Should throw for negative position
+    await expect(reader.seek(-1)).rejects.toThrow('position cannot be negative')
+  })
+
+  it('should get stream info for tombstoned stream', async () => {
+    if (!config) return
+
+    journal = testStage.actorFor<KurrentDBJournal<string>>(
+      {
+        type: () => 'Journal',
+        instantiator: () => ({
+          instantiate: () => new KurrentDBJournal(config)
+        })
+      }
+    )
+
+    const streamName = `tombstone-info-${Date.now()}`
+
+    // Create and tombstone stream
+    await journal.append(streamName, StreamState.NoStream, new AccountOpened('ti', 'TI', 100), Metadata.nullMetadata())
+    await journal.tombstone(streamName)
+
+    const info = await journal.streamInfo(streamName)
+    expect(info.isTombstoned).toBe(true)
+  })
+
+  it('should create config using KurrentDBConfig.create() with options', async () => {
+    // Test create() factory method with tls=false
+    const configFromCreate = KurrentDBConfig.create({
+      endpoint: 'localhost:2113',
+      tls: false
+    })
+
+    expect(configFromCreate).toBeDefined()
+    expect(configFromCreate.getClient()).toBeDefined()
+
+    await configFromCreate.close()
+  })
+
+  it('should create config using KurrentDBConfig.create() with TLS options', async () => {
+    // Test create() with tls=true and tlsVerifyCert=false
+    const configWithTls = KurrentDBConfig.create({
+      endpoint: 'localhost:2113',
+      tls: true,
+      tlsVerifyCert: false
+    })
+
+    expect(configWithTls).toBeDefined()
+    expect(configWithTls.getClient()).toBeDefined()
+
+    await configWithTls.close()
+  })
+
+  it('should create config using KurrentDBConfig.fromClient()', async () => {
+    if (!config) return
+
+    // Get existing client and create new config from it
+    const existingClient = config.getClient()
+    const configFromClient = KurrentDBConfig.fromClient(existingClient)
+
+    expect(configFromClient).toBeDefined()
+    expect(configFromClient.getClient()).toBe(existingClient)
+  })
 })

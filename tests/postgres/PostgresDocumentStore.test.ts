@@ -352,4 +352,177 @@ describe('PostgresDocumentStore', () => {
     expect(readResult.outcome.success).toBe(true)
     expect(readResult.state?.name).toBe('Ivan')
   })
+
+  it('should return error when reading with empty id', async () => {
+    store = testStage.actorFor<PostgresDocumentStore>(
+      {
+        type: () => 'DocumentStore',
+        instantiator: () => ({
+          instantiate: () => new PostgresDocumentStore(config)
+        })
+      }
+    )
+
+    const result = await store.read('', 'User')
+    expect(result.outcome.success).toBe(false)
+    expect(result.outcome.error?.result).toBe(Result.Error)
+    expect(result.stateVersion).toBe(-1)
+  })
+
+  it('should return error when reading with empty type', async () => {
+    store = testStage.actorFor<PostgresDocumentStore>(
+      {
+        type: () => 'DocumentStore',
+        instantiator: () => ({
+          instantiate: () => new PostgresDocumentStore(config)
+        })
+      }
+    )
+
+    const result = await store.read('user-123', '')
+    expect(result.outcome.success).toBe(false)
+    expect(result.outcome.error?.result).toBe(Result.Error)
+    expect(result.stateVersion).toBe(-1)
+  })
+
+  it('should return error when writing null state', async () => {
+    store = testStage.actorFor<PostgresDocumentStore>(
+      {
+        type: () => 'DocumentStore',
+        instantiator: () => ({
+          instantiate: () => new PostgresDocumentStore(config)
+        })
+      }
+    )
+
+    const result = await store.write('user-null', 'User', null as unknown as UserState, 1)
+    expect(result.outcome.success).toBe(false)
+    expect(result.outcome.error?.result).toBe(Result.Error)
+  })
+
+  it('should return all not found when reading all missing documents', async () => {
+    store = testStage.actorFor<PostgresDocumentStore>(
+      {
+        type: () => 'DocumentStore',
+        instantiator: () => ({
+          instantiate: () => new PostgresDocumentStore(config)
+        })
+      }
+    )
+
+    const result = await store.readAll([
+      { id: 'missing-1', type: 'User' },
+      { id: 'missing-2', type: 'User' }
+    ])
+
+    expect(result.outcome.success).toBe(false)
+    expect(result.outcome.error?.result).toBe(Result.NotAllFound)
+    expect(result.bundles.length).toBe(0)
+  })
+
+  it('should return success value in outcome', async () => {
+    store = testStage.actorFor<PostgresDocumentStore>(
+      {
+        type: () => 'DocumentStore',
+        instantiator: () => ({
+          instantiate: () => new PostgresDocumentStore(config)
+        })
+      }
+    )
+
+    const user: UserState = { name: 'OutcomeTest', email: 'outcome@test.com', age: 33 }
+
+    await store.write('outcome-test', 'User', user, 1)
+
+    const result = await store.read<UserState>('outcome-test', 'User')
+    expect(result.outcome.success).toBe(true)
+    expect(result.outcome.value).toEqual(user)
+  })
+
+  it('should return write result with sources', async () => {
+    store = testStage.actorFor<PostgresDocumentStore>(
+      {
+        type: () => 'DocumentStore',
+        instantiator: () => ({
+          instantiate: () => new PostgresDocumentStore(config)
+        })
+      }
+    )
+
+    class TestEvent extends DomainEvent {
+      constructor(public readonly data: string) {
+        super()
+      }
+
+      override id(): string {
+        return this.data
+      }
+    }
+
+    const user: UserState = { name: 'SourcesTest', email: 'sources@test.com', age: 25 }
+    const sources = [new TestEvent('test-data')]
+
+    const result = await store.write('sources-test', 'User', user, 1, sources)
+    expect(result.outcome.success).toBe(true)
+    expect(result.sources).toEqual(sources)
+    expect(result.state).toEqual(user)
+    expect(result.id).toBe('sources-test')
+  })
+
+  it('should handle readAll returning all found bundles', async () => {
+    store = testStage.actorFor<PostgresDocumentStore>(
+      {
+        type: () => 'DocumentStore',
+        instantiator: () => ({
+          instantiate: () => new PostgresDocumentStore(config)
+        })
+      }
+    )
+
+    // Write documents
+    await store.write('bundle-1', 'User', { name: 'Bundle1', email: 'b1@test.com', age: 1 }, 1)
+    await store.write('bundle-2', 'User', { name: 'Bundle2', email: 'b2@test.com', age: 2 }, 1)
+    await store.write('bundle-3', 'User', { name: 'Bundle3', email: 'b3@test.com', age: 3 }, 1)
+
+    const result = await store.readAll([
+      { id: 'bundle-1', type: 'User' },
+      { id: 'bundle-2', type: 'User' },
+      { id: 'bundle-3', type: 'User' }
+    ])
+
+    expect(result.outcome.success).toBe(true)
+    expect(result.bundles.length).toBe(3)
+  })
+
+  it('should verify PostgresConfig methods', async () => {
+    // Test fromPool (already used in beforeAll)
+    expect(config).toBeDefined()
+    const testPool = config.getPool()
+    expect(testPool).toBeDefined()
+
+    // Test fromConnectionString creates valid config
+    const connectionString = process.env.TEST_POSTGRES_URL || 'postgresql://postgres:postgres@localhost:5432/domo_test'
+    const configFromString = PostgresConfig.fromConnectionString(connectionString)
+    expect(configFromString).toBeDefined()
+    expect(configFromString.getPool()).toBeDefined()
+
+    // Clean up the additional pool
+    await configFromString.close()
+  })
+
+  it('should verify PostgresConfig.create method', async () => {
+    const configFromCreate = PostgresConfig.create({
+      host: 'localhost',
+      port: 5432,
+      database: 'domo_test',
+      user: 'postgres',
+      password: 'postgres'
+    })
+
+    expect(configFromCreate).toBeDefined()
+    expect(configFromCreate.getPool()).toBeDefined()
+
+    // Clean up
+    await configFromCreate.close()
+  })
 })
