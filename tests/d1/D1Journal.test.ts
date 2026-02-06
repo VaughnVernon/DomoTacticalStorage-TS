@@ -136,8 +136,8 @@ describe('D1Journal', () => {
 
     expect(stream.streamVersion).toBe(2)
     expect(stream.entries.length).toBe(2)
-    expect(stream.entries[0].type).toBe('AccountOpened')
-    expect(stream.entries[1].type).toBe('FundsDeposited')
+    expect(stream.entries[0].type).toBe('account-opened')
+    expect(stream.entries[1].type).toBe('funds-deposited')
   })
 
   it('should append with StreamState.Any', async () => {
@@ -275,9 +275,9 @@ describe('D1Journal', () => {
     const entries = await reader.readNext(3)
 
     expect(entries.length).toBe(3)
-    expect(entries[0].type).toBe('AccountOpened')
-    expect(entries[1].type).toBe('AccountOpened')
-    expect(entries[2].type).toBe('FundsDeposited')
+    expect(entries[0].type).toBe('account-opened')
+    expect(entries[1].type).toBe('account-opened')
+    expect(entries[2].type).toBe('funds-deposited')
 
     // Check position tracking - should have advanced (position is global_position, not count)
     const position = await reader.position()
@@ -397,7 +397,7 @@ describe('D1Journal', () => {
     expect(entry.id).toBeDefined()
     expect(entry.id.length).toBe(26) // ULID length
     expect(entry.globalPosition).toBeGreaterThan(0)
-    expect(entry.type).toBe('AccountOpened')
+    expect(entry.type).toBe('account-opened')
     expect(entry.typeVersion).toBe(1)
     expect(entry.streamVersion).toBe(1)
     expect(entry.entryData).toBeDefined()
