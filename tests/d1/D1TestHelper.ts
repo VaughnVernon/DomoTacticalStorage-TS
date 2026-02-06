@@ -25,7 +25,7 @@ const JOURNAL_SCHEMA_STATEMENTS = [
 
 // Document schema statements for D1 (single line for compatibility)
 const DOCUMENT_SCHEMA_STATEMENTS = [
-  `CREATE TABLE IF NOT EXISTS documents (id TEXT NOT NULL, type TEXT NOT NULL, state TEXT NOT NULL, state_version INTEGER NOT NULL, metadata TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')), PRIMARY KEY (type, id))`,
+  `CREATE TABLE IF NOT EXISTS documents (id TEXT NOT NULL, type TEXT NOT NULL, state_type TEXT NOT NULL, state_type_version INTEGER NOT NULL DEFAULT 1, state TEXT NOT NULL, state_version INTEGER NOT NULL, metadata TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')), PRIMARY KEY (type, id))`,
 
   `CREATE TABLE IF NOT EXISTS document_sources (id INTEGER PRIMARY KEY AUTOINCREMENT, document_id TEXT NOT NULL, document_type TEXT NOT NULL, source_type TEXT NOT NULL, source_type_version INTEGER NOT NULL DEFAULT 1, source_data TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')))`,
 
