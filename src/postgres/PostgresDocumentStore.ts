@@ -15,7 +15,7 @@ import {
   WriteResult,
   Outcome
 } from 'domo-tactical/store/document'
-import { Source, Metadata, Result, StorageException } from 'domo-tactical/store'
+import { Source, Metadata, Result, StorageException, StoreTypeMapper } from 'domo-tactical/store'
 import { Pool } from 'pg'
 import { PostgresConfig } from './PostgresConfig.js'
 
@@ -23,6 +23,7 @@ import { PostgresConfig } from './PostgresConfig.js'
  * PostgreSQL implementation of DocumentStore.
  *
  * Stores documents as JSONB in PostgreSQL with optimistic concurrency control.
+ * Uses StoreTypeMapper for type name conversion (PascalCase ↔ kebab-case).
  *
  * @example
  * ```typescript
@@ -44,6 +45,7 @@ import { PostgresConfig } from './PostgresConfig.js'
  */
 export class PostgresDocumentStore extends Actor implements DocumentStore {
   private readonly pool: Pool
+  private readonly typeMapper = StoreTypeMapper.instance()
 
   constructor(config: PostgresConfig) {
     super()
@@ -80,7 +82,7 @@ export class PostgresDocumentStore extends Actor implements DocumentStore {
     const client = await this.pool.connect()
     try {
       const result = await client.query(
-        `SELECT state, state_version, metadata FROM documents WHERE type = $1 AND id = $2`,
+        `SELECT state_type, state_type_version, state, state_version, metadata FROM documents WHERE type = $1 AND id = $2`,
         [type, id]
       )
 
@@ -207,16 +209,18 @@ export class PostgresDocumentStore extends Actor implements DocumentStore {
         }
       }
 
-      // Serialize metadata
+      // Use StoreTypeMapper for type name conversion (PascalCase → kebab-case)
+      const stateType = this.typeMapper.toSymbolicName(type)
+      const stateTypeVersion = 1 // Default type version
       const metadataJson = this.serializeMetadata(metadata)
 
       // Upsert document
       await client.query(
-        `INSERT INTO documents (id, type, state, state_version, metadata)
-         VALUES ($1, $2, $3, $4, $5)
+        `INSERT INTO documents (id, type, state_type, state_type_version, state, state_version, metadata)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
          ON CONFLICT (type, id)
-         DO UPDATE SET state = $3, state_version = $4, metadata = $5, updated_at = NOW()`,
-        [id, type, JSON.stringify(state), stateVersion, metadataJson]
+         DO UPDATE SET state_type = $3, state_type_version = $4, state = $5, state_version = $6, metadata = $7, updated_at = NOW()`,
+        [id, type, stateType, stateTypeVersion, JSON.stringify(state), stateVersion, metadataJson]
       )
 
       // Store sources if provided
