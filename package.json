@@ -40,13 +40,14 @@
     "test:kurrentdb": "vitest run tests/kurrentdb",
     "test:d1": "vitest run tests/d1",
     "test:all": "./scripts/run-tests.sh",
+    "test:all-coverage": "./scripts/run-tests.sh --coverage",
     "test:all:keep": "./scripts/run-tests.sh --keep",
     "infra:up": "docker compose up -d",
     "infra:down": "docker compose down -v",
     "infra:logs": "docker compose logs -f",
     "clean": "rm -rf dist",
-    "prepublishOnly": "npm run clean && npm run build && npm test",
-    "preversion": "npm test",
+    "prepublishOnly": "npm run clean && npm run build && npm run test:all",
+    "preversion": "npm run test:all",
     "postversion": "git push && git push --tags"
   },
   "keywords": [
@@ -74,7 +75,7 @@
   },
   "peerDependencies": {
     "domo-actors": "^1.2.0",
-    "domo-tactical": "^0.3.0"
+    "domo-tactical": "^0.5.0"
   },
   "dependencies": {
     "@kurrent/kurrentdb-client": "^1.1.0",
@@ -88,8 +89,8 @@
     "@types/pg": "^8.10.0",
     "@vitest/coverage-v8": "^4.0.13",
     "domo-actors": "^1.2.0",
-    "domo-tactical": "^0.3.0",
-    "miniflare": "^3.20241018.0",
+    "domo-tactical": "^0.5.0",
+    "miniflare": "^4.20260131.0",
     "typescript": "^5.7.2",
     "vitest": "^4.0.13"
   }
