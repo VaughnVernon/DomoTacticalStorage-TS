@@ -19,6 +19,7 @@ RUN_POSTGRES=true
 RUN_KURRENTDB=true
 RUN_D1=true
 KEEP_CONTAINERS=false
+WITH_COVERAGE=false
 
 usage() {
     echo "Usage: $0 [OPTIONS]"
@@ -30,6 +31,7 @@ usage() {
     echo "  --no-postgres      Skip PostgreSQL tests"
     echo "  --no-kurrentdb     Skip KurrentDB tests"
     echo "  --no-d1            Skip D1 tests"
+    echo "  --coverage         Run tests with coverage reporting"
     echo "  --keep             Keep containers running after tests"
     echo "  --help             Show this help message"
     exit 0
@@ -63,6 +65,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --no-d1)
             RUN_D1=false
+            shift
+            ;;
+        --coverage)
+            WITH_COVERAGE=true
             shift
             ;;
         --keep)
@@ -148,7 +154,12 @@ run_postgres_tests() {
 
         export TEST_POSTGRES_URL="postgresql://postgres:postgres@localhost:5432/domo_test"
 
-        if npm run test:postgres; then
+        local cmd="npm run test:postgres"
+        if [ "$WITH_COVERAGE" = true ]; then
+            cmd="npx vitest run tests/postgres --coverage"
+        fi
+
+        if $cmd; then
             echo -e "${GREEN}PostgreSQL tests passed${NC}"
             POSTGRES_RESULT=0
         else
@@ -163,9 +174,14 @@ run_kurrentdb_tests() {
     if [ "$RUN_KURRENTDB" = true ]; then
         echo -e "\n${BLUE}=== Running KurrentDB Tests ===${NC}"
 
-        export TEST_KURRENTDB_URL="kurrentdb://localhost:2113?tls=false"
+        export TEST_KURRENTDB_URL="esdb://localhost:2113?tls=false"
 
-        if npm run test:kurrentdb; then
+        local cmd="npm run test:kurrentdb"
+        if [ "$WITH_COVERAGE" = true ]; then
+            cmd="npx vitest run tests/kurrentdb --coverage"
+        fi
+
+        if $cmd; then
             echo -e "${GREEN}KurrentDB tests passed${NC}"
             KURRENTDB_RESULT=0
         else
@@ -180,7 +196,12 @@ run_d1_tests() {
     if [ "$RUN_D1" = true ]; then
         echo -e "\n${BLUE}=== Running D1 Tests ===${NC}"
 
-        if npm run test:d1; then
+        local cmd="npm run test:d1"
+        if [ "$WITH_COVERAGE" = true ]; then
+            cmd="npx vitest run tests/d1 --coverage"
+        fi
+
+        if $cmd; then
             echo -e "${GREEN}D1 tests passed${NC}"
             D1_RESULT=0
         else
@@ -190,11 +211,49 @@ run_d1_tests() {
     fi
 }
 
+# Run all tests with combined coverage
+run_all_with_coverage() {
+    echo -e "\n${BLUE}=== Running All Tests with Coverage ===${NC}"
+
+    export TEST_POSTGRES_URL="postgresql://postgres:postgres@localhost:5432/domo_test"
+    export TEST_KURRENTDB_URL="esdb://localhost:2113?tls=false"
+
+    # Build test paths based on what's enabled
+    local test_paths=""
+    if [ "$RUN_POSTGRES" = true ]; then
+        test_paths="$test_paths tests/postgres"
+    fi
+    if [ "$RUN_KURRENTDB" = true ]; then
+        test_paths="$test_paths tests/kurrentdb"
+    fi
+    if [ "$RUN_D1" = true ]; then
+        test_paths="$test_paths tests/d1"
+    fi
+
+    if npx vitest run $test_paths --coverage; then
+        echo -e "${GREEN}All tests passed${NC}"
+        POSTGRES_RESULT=0
+        KURRENTDB_RESULT=0
+        D1_RESULT=0
+    else
+        echo -e "${RED}Some tests failed${NC}"
+        # Set all to failed - individual results not tracked in combined mode
+        POSTGRES_RESULT=1
+        KURRENTDB_RESULT=1
+        D1_RESULT=1
+    fi
+}
+
 # Main execution
 start_infrastructure
-run_postgres_tests
-run_kurrentdb_tests
-run_d1_tests
+
+if [ "$WITH_COVERAGE" = true ]; then
+    run_all_with_coverage
+else
+    run_postgres_tests
+    run_kurrentdb_tests
+    run_d1_tests
+fi
 
 # Summary
 echo -e "\n${BLUE}=== Test Summary ===${NC}"
