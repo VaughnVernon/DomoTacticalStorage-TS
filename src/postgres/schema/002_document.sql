@@ -5,6 +5,8 @@
 CREATE TABLE IF NOT EXISTS documents (
     id VARCHAR(500) NOT NULL,
     type VARCHAR(500) NOT NULL,
+    state_type VARCHAR(500) NOT NULL,
+    state_type_version INT NOT NULL DEFAULT 1,
     state JSONB NOT NULL,
     state_version BIGINT NOT NULL,
     metadata JSONB,
