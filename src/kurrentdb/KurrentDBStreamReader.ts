@@ -126,7 +126,7 @@ export class KurrentDBStreamReader<T> extends Actor implements StreamReader<T> {
         const snapData = event.data as unknown as SnapshotMetadata
         return new ObjectState(
           streamName,
-          Object,
+          snapData.snapshotType, // Use stored type name (string)
           snapData.snapshotTypeVersion,
           snapData.snapshotData,
           snapData.snapshotVersion
