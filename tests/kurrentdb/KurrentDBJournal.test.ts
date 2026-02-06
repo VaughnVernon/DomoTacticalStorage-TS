@@ -184,8 +184,8 @@ describe('KurrentDBJournal', () => {
 
     expect(stream.streamVersion).toBe(2)
     expect(stream.entries.length).toBe(2)
-    expect(stream.entries[0].type).toBe('AccountOpened')
-    expect(stream.entries[1].type).toBe('FundsDeposited')
+    expect(stream.entries[0].type).toBe('account-opened')
+    expect(stream.entries[1].type).toBe('funds-deposited')
   })
 
   it('should tombstone a stream', async () => {
@@ -581,7 +581,7 @@ describe('KurrentDBJournal', () => {
     // Verify all Entry properties
     expect(entry.id).toBeDefined()
     expect(entry.globalPosition).toBeGreaterThanOrEqual(0) // KurrentDB uses commitPosition
-    expect(entry.type).toBe('AccountOpened')
+    expect(entry.type).toBe('account-opened')
     expect(entry.typeVersion).toBe(1)
     expect(entry.streamVersion).toBe(1)
     expect(entry.entryData).toBeDefined()
@@ -620,7 +620,7 @@ describe('KurrentDBJournal', () => {
 
     // Filter to only our test entries (KurrentDB $all contains all events)
     const testEntries = entries.filter(e =>
-      e.type === 'AccountOpened' || e.type === 'FundsDeposited'
+      e.type === 'account-opened' || e.type === 'funds-deposited'
     )
 
     expect(testEntries.length).toBeGreaterThanOrEqual(3)
