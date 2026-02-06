@@ -122,6 +122,8 @@ CREATE INDEX idx_journal_entries_type ON journal_entries(entry_type);
 CREATE TABLE documents (
     id VARCHAR(500) NOT NULL,
     type VARCHAR(500) NOT NULL,
+    state_type VARCHAR(500) NOT NULL,
+    state_type_version INT NOT NULL DEFAULT 1,
     state JSONB NOT NULL,
     state_version BIGINT NOT NULL,
     metadata JSONB,
@@ -504,9 +506,155 @@ const journal = stage().actorFor(
 
 ## Testing
 
-### Using InMemory for Tests
+This package includes comprehensive test suites for all three storage backends with >85% code coverage.
 
-Continue using InMemory implementations for unit tests:
+### Test Suite Overview
+
+| Test Suite | Command | External Dependencies | Tests |
+|------------|---------|----------------------|-------|
+| **D1** | `npm run test:d1` | None (uses Miniflare) | 59 tests |
+| **PostgreSQL** | `npm run test:postgres` | PostgreSQL database | 45 tests |
+| **KurrentDB** | `npm run test:kurrentdb` | KurrentDB/EventStoreDB | 26 tests |
+| **All** | `npm test` | Varies (see below) | 130 tests |
+
+### Infrastructure Requirements
+
+#### D1 Tests (No External Dependencies)
+
+D1 tests use [Miniflare](https://miniflare.dev/) to simulate Cloudflare's D1 database locally. No external services required.
+
+```bash
+npm run test:d1
+```
+
+#### PostgreSQL Tests
+
+Requires a running PostgreSQL instance. The tests will automatically create the required schema.
+
+**Option 1: Using Docker Compose**
+```bash
+npm run infra:up        # Starts PostgreSQL and KurrentDB
+npm run test:postgres
+npm run infra:down      # Stops and removes containers
+```
+
+**Option 2: Using an existing PostgreSQL instance**
+```bash
+export TEST_POSTGRES_URL="postgresql://postgres:postgres@localhost:5432/domo_test"
+npm run test:postgres
+```
+
+**Default connection** (if `TEST_POSTGRES_URL` not set):
+```
+postgresql://postgres:postgres@localhost:5432/domo_test
+```
+
+#### KurrentDB Tests
+
+Requires a running KurrentDB/EventStoreDB instance and the `TEST_KURRENTDB_URL` environment variable.
+
+**Option 1: Using Docker Compose**
+```bash
+npm run infra:up
+export TEST_KURRENTDB_URL="esdb://localhost:2113?tls=false"
+npm run test:kurrentdb
+npm run infra:down
+```
+
+**Option 2: Using Docker directly**
+```bash
+docker run -d --name kurrentdb \
+  -p 2113:2113 -p 1113:1113 \
+  eventstore/eventstore:latest \
+  --insecure --run-projections=All
+
+export TEST_KURRENTDB_URL="esdb://localhost:2113?tls=false"
+npm run test:kurrentdb
+```
+
+**Note:** If `TEST_KURRENTDB_URL` is not set, KurrentDB tests will be skipped gracefully.
+
+### Running Tests
+
+```bash
+# Run all tests (D1 always runs; Postgres/KurrentDB skip if unavailable)
+npm test
+
+# Run specific backend tests
+npm run test:d1          # D1 only (no external deps)
+npm run test:postgres    # PostgreSQL only
+npm run test:kurrentdb   # KurrentDB only
+
+# Run with coverage report
+npm run test:coverage
+
+# Run all with automatic infrastructure management
+npm run test:all         # Starts Docker, runs all tests, stops Docker
+npm run test:all:keep    # Same but keeps containers running for debugging
+
+# Infrastructure management
+npm run infra:up         # Start PostgreSQL + KurrentDB via Docker Compose
+npm run infra:down       # Stop and remove containers
+npm run infra:logs       # View container logs
+```
+
+### Test Behavior
+
+When running `npm test` (all tests):
+
+| Backend | Behavior |
+|---------|----------|
+| **D1** | Always runs - uses Miniflare (in-memory) |
+| **PostgreSQL** | Runs if database is available; skips gracefully if not |
+| **KurrentDB** | Runs if `TEST_KURRENTDB_URL` is set; skips gracefully if not |
+
+This allows CI/CD pipelines to run D1 tests without infrastructure, while still supporting full integration testing when databases are available.
+
+### Coverage Requirements
+
+The test suite maintains **>85% code coverage** across all backends:
+
+| Backend | Coverage Target | Key Files |
+|---------|-----------------|-----------|
+| D1 | >90% | D1Journal, D1DocumentStore, D1StreamReader, D1JournalReader, D1Config |
+| PostgreSQL | >85% | PostgresJournal, PostgresDocumentStore, PostgresStreamReader, PostgresJournalReader, PostgresConfig |
+| KurrentDB | >85% | KurrentDBJournal, KurrentDBStreamReader, KurrentDBJournalReader, KurrentDBConfig |
+
+Run coverage report:
+```bash
+npm run test:coverage
+```
+
+### What the Tests Cover
+
+#### Journal Tests
+- `append()` / `appendWith()` - Single event append with optional snapshot
+- `appendAll()` / `appendAllWith()` - Batch event append with optional snapshot
+- `streamReader()` - Reading entries from a specific stream
+- `journalReader()` - Reading entries across all streams (for projections)
+- `tombstone()` - Permanent stream deletion
+- `softDelete()` - Reversible stream deletion
+- `truncateBefore()` - Stream truncation
+- `streamInfo()` - Stream metadata retrieval
+- Concurrency control (`StreamState.NoStream`, `StreamState.Any`, `StreamState.StreamExists`, specific versions)
+- Entry properties (`globalPosition`, `streamVersion`, `typeVersion`, `entryData`, `metadata`)
+
+#### DocumentStore Tests
+- `write()` - Document creation and update with version control
+- `read()` - Single document retrieval
+- `readAll()` - Batch document retrieval
+- Concurrency violation detection
+- Metadata preservation
+- Source tracking for causation
+
+#### Config Tests
+- All factory methods (`create()`, `fromConnectionString()`, `fromPool()`/`fromClient()`)
+- Connection management (`getPool()`/`getClient()`/`getDatabase()`)
+- Cleanup (`close()`)
+
+### Using InMemory for Unit Tests
+
+For unit testing your domain logic, use InMemory implementations from `domo-tactical`:
 
 ```typescript
 import { TestJournal, TestDocumentStore } from 'domo-tactical/testkit'
@@ -523,9 +671,9 @@ describe('Account', () => {
 })
 ```
 
-### Integration Tests with Real Backends
+### Writing Integration Tests
 
-For integration tests, use Docker:
+For integration tests with real backends:
 
 ```typescript
 import { PostgresConfig, PostgresJournal } from 'domo-tactical-storage/postgres'
@@ -541,8 +689,7 @@ describe('PostgresJournal Integration', () => {
     })
     config = PostgresConfig.fromPool(pool)
 
-    // Run migrations
-    await pool.query(`CREATE TABLE IF NOT EXISTS streams ...`)
+    // Schema is auto-created by the test setup
   })
 
   afterAll(async () => {
@@ -550,7 +697,8 @@ describe('PostgresJournal Integration', () => {
   })
 
   beforeEach(async () => {
-    await pool.query('TRUNCATE streams, journal_entries, snapshots RESTART IDENTITY CASCADE')
+    // Clean data between tests
+    await pool.query('TRUNCATE streams, journal_entries, snapshots, journal_reader_positions RESTART IDENTITY CASCADE')
   })
 
   it('should persist events', async () => {
@@ -564,23 +712,38 @@ describe('PostgresJournal Integration', () => {
 })
 ```
 
-### Running Tests
+### CI/CD Integration
 
-This package includes comprehensive tests:
+For CI/CD pipelines, you can:
 
-```bash
-# Run all tests
-npm test
+1. **Run D1 tests only** (no infrastructure needed):
+   ```yaml
+   - run: npm run test:d1
+   ```
 
-# Run specific backend tests
-npm run test:postgres    # Requires PostgreSQL
-npm run test:kurrentdb   # Requires KurrentDB
-npm run test:d1          # Uses Miniflare (no external deps)
+2. **Run all tests with services**:
+   ```yaml
+   services:
+     postgres:
+       image: postgres:15
+       env:
+         POSTGRES_PASSWORD: postgres
+         POSTGRES_DB: domo_test
+     kurrentdb:
+       image: eventstore/eventstore:latest
+       env:
+         EVENTSTORE_INSECURE: true
+   steps:
+     - run: |
+         export TEST_POSTGRES_URL="postgresql://postgres:postgres@postgres:5432/domo_test"
+         export TEST_KURRENTDB_URL="esdb://kurrentdb:2113?tls=false"
+         npm test
+   ```
 
-# Run all with infrastructure
-npm run test:all         # Starts Docker, runs all, stops Docker
-npm run test:all:keep    # Same but keeps containers running
-```
+3. **Use the all-in-one script** (requires Docker):
+   ```yaml
+   - run: npm run test:all
+   ```
 
 ## Migration from InMemory
 
