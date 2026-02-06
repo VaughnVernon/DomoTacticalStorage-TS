@@ -5,6 +5,8 @@
 CREATE TABLE IF NOT EXISTS documents (
     id TEXT NOT NULL,
     type TEXT NOT NULL,
+    state_type TEXT NOT NULL,
+    state_type_version INTEGER NOT NULL DEFAULT 1,
     state TEXT NOT NULL,
     state_version INTEGER NOT NULL,
     metadata TEXT,
