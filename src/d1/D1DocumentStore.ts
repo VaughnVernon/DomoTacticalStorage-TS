@@ -15,13 +15,14 @@ import {
   WriteResult,
   Outcome
 } from 'domo-tactical/store/document'
-import { Source, Metadata, Result, StorageException } from 'domo-tactical/store'
+import { Source, Metadata, Result, StorageException, StoreTypeMapper } from 'domo-tactical/store'
 import { D1Config } from './D1Config.js'
 
 /**
  * Cloudflare D1 implementation of DocumentStore.
  *
  * Stores documents as JSON text in D1/SQLite with optimistic concurrency control.
+ * Uses StoreTypeMapper for type name conversion (PascalCase ↔ kebab-case).
  *
  * @example
  * ```typescript
@@ -38,6 +39,7 @@ import { D1Config } from './D1Config.js'
  */
 export class D1DocumentStore extends Actor implements DocumentStore {
   private readonly db: D1Database
+  private readonly typeMapper = StoreTypeMapper.instance()
 
   constructor(config: D1Config) {
     super()
@@ -72,8 +74,10 @@ export class D1DocumentStore extends Actor implements DocumentStore {
     }
 
     const result = await this.db.prepare(
-      `SELECT state, state_version, metadata FROM documents WHERE type = ? AND id = ?`
+      `SELECT state_type, state_type_version, state, state_version, metadata FROM documents WHERE type = ? AND id = ?`
     ).bind(type, id).first<{
+      state_type: string
+      state_type_version: number
       state: string
       state_version: number
       metadata: string | null
@@ -191,17 +195,23 @@ export class D1DocumentStore extends Actor implements DocumentStore {
       // Build batch operations
       const statements: D1PreparedStatement[] = []
 
-      // Serialize metadata
+      // Use StoreTypeMapper for type name conversion (PascalCase → kebab-case)
+      const stateType = this.typeMapper.toSymbolicName(type)
+      const stateTypeVersion = 1 // Default type version
+      const stateData = JSON.stringify(state)
       const metadataJson = this.serializeMetadata(metadata)
 
       // Upsert document
       statements.push(
         this.db.prepare(
-          `INSERT INTO documents (id, type, state, state_version, metadata)
-           VALUES (?, ?, ?, ?, ?)
+          `INSERT INTO documents (id, type, state_type, state_type_version, state, state_version, metadata)
+           VALUES (?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT (type, id)
-           DO UPDATE SET state = ?, state_version = ?, metadata = ?, updated_at = datetime('now')`
-        ).bind(id, type, JSON.stringify(state), stateVersion, metadataJson, JSON.stringify(state), stateVersion, metadataJson)
+           DO UPDATE SET state_type = ?, state_type_version = ?, state = ?, state_version = ?, metadata = ?, updated_at = datetime('now')`
+        ).bind(
+          id, type, stateType, stateTypeVersion, stateData, stateVersion, metadataJson,
+          stateType, stateTypeVersion, stateData, stateVersion, metadataJson
+        )
       )
 
       // Store sources if provided
