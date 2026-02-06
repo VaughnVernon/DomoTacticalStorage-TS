@@ -102,7 +102,7 @@ export class D1StreamReader<T> extends Actor implements StreamReader<T> {
       const snapData = JSON.parse(snapshotResult.snapshot_data)
       snapshot = new ObjectState(
         streamName,
-        Object,
+        snapshotResult.snapshot_type, // Use stored type name (string)
         snapshotResult.snapshot_type_version,
         snapData,
         snapshotResult.snapshot_version

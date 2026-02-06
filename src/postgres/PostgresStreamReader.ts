@@ -93,7 +93,7 @@ export class PostgresStreamReader<T> extends Actor implements StreamReader<T> {
           : snapRow.snapshot_data
         snapshot = new ObjectState(
           streamName,
-          Object, // We don't have the actual type constructor
+          snapRow.snapshot_type, // Use stored type name (string)
           snapRow.snapshot_type_version,
           snapData,
           Number(snapRow.snapshot_version)
