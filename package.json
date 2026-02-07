@@ -1,6 +1,6 @@
 {
   "name": "domo-tactical-storage",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Persistent storage backends for DomoTactical-TS - PostgreSQL, KurrentDB/EventStoreDB, and Cloudflare D1",
   "author": "Vaughn Vernon",
   "license": "RPL-1.5",
