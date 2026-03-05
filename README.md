@@ -1,4 +1,7 @@
 # DomoTacticalStorage-TS
+![DomoTactical Logo](./docs/domo-tactical-storage-logo.png)
+
+Persistent storage backends for [DomoTactical-TS](https://github.com/VaughnVernon/DomoTactical-TS) - providing production-ready Journal and DocumentStore implementations for KurrentDB/EventStoreDB, PostgreSQL, and Cloudflare D1.
 
 [![License: RPL-1.5](https://img.shields.io/badge/License-RPL--1.5-blue.svg)](https://opensource.org/license/rpl-1-5)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)](https://www.typescriptlang.org/)
@@ -10,8 +13,6 @@
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-12+-336791.svg?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![Cloudflare D1](https://img.shields.io/badge/Cloudflare-D1-F38020.svg?logo=cloudflare&logoColor=white)](https://developers.cloudflare.com/d1/)
 [![GitHub stars](https://img.shields.io/github/stars/VaughnVernon/DomoTacticalStorage-TS.svg)](https://github.com/VaughnVernon/DomoTacticalStorage-TS/stargazers)
-
-Persistent storage backends for [DomoTactical-TS](https://github.com/VaughnVernon/DomoTactical-TS) - providing production-ready Journal and DocumentStore implementations for KurrentDB/EventStoreDB, PostgreSQL, and Cloudflare D1.
 
 ## Overview
 
