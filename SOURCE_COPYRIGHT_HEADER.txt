@@ -3,23 +3,17 @@
 //
 // See: LICENSE.md in repository root directory
 //
-// This file is part of DomoTacticalStorage-TS.
+// This file is part of DomoActors-TS.
 //
-// DomoTacticalStorage-TS is free software: you can redistribute it and/or
+// DomoActors-TS is free software: you can redistribute it and/or
 // modify it under the terms of the GNU General Public License as
 // published by the Free Software Foundation, either version 3 of
 // the License, or (at your option) any later version.
 //
-// DomoTacticalStorage-TS is distributed in the hope that it will be useful,
+// DomoActors-TS is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with DomoTacticalStorage-TS. If not, see <https://www.gnu.org/licenses/>.
-
-export { PostgresConfig } from './PostgresConfig.js'
-export { PostgresJournal } from './PostgresJournal.js'
-export { PostgresJournalReader } from './PostgresJournalReader.js'
-export { PostgresStreamReader } from './PostgresStreamReader.js'
-export { PostgresDocumentStore } from './PostgresDocumentStore.js'
+// along with DomoActors-TS. If not, see <https://www.gnu.org/licenses/>.

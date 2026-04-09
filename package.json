@@ -3,7 +3,7 @@
   "version": "0.2.0",
   "description": "Persistent storage backends for DomoTactical-TS - PostgreSQL, KurrentDB/EventStoreDB, and Cloudflare D1",
   "author": "Vaughn Vernon",
-  "license": "RPL-1.5",
+  "license": "LGPL-3.0-or-later",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

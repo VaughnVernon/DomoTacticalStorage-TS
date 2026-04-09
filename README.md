@@ -3,7 +3,7 @@
 
 Persistent storage backends for [DomoTactical-TS](https://github.com/VaughnVernon/DomoTactical-TS) - providing production-ready Journal and DocumentStore implementations for KurrentDB/EventStoreDB, PostgreSQL, and Cloudflare D1.
 
-[![License: RPL-1.5](https://img.shields.io/badge/License-RPL--1.5-blue.svg)](https://opensource.org/license/rpl-1-5)
+[![License: LGPL-3.0](https://img.shields.io/badge/License-LGPL--3.0-blue.svg)](https://www.gnu.org/licenses/lgpl-3.0)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)](https://www.typescriptlang.org/)
 [![npm version](https://img.shields.io/npm/v/domo-tactical-storage.svg)](https://www.npmjs.com/package/domo-tactical-storage)
 [![V8](https://img.shields.io/badge/V8-Compatible-orange.svg)](https://v8.dev/)
@@ -116,7 +116,7 @@ stage().registerValue('domo-tactical:myapp.journal', journal)
 
 ## License
 
-Licensed under the Reciprocal Public License 1.5 (RPL-1.5)
+GNU Lesser General Public License v3.0 (LGPL-3.0)
 
 See [LICENSE.md](LICENSE.md) for details.
 
